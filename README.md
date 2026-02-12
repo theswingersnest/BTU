@@ -125,7 +125,7 @@ root/
    ```bash
    npm run dev
    ```
-   The app will be running at `http://localhost:3000`.
+   The app will be running at `http://localhost:3001`.
 
 ## 🐳 Docker Support
 
