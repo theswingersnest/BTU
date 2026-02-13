@@ -19,7 +19,9 @@ echo "------------------------------------------------"
 # 1. Update and Install System Dependencies
 echo "[1/8] Installing System Dependencies..."
 sudo apt update
-sudo apt install -y python3-pip python3-venv nginx postgresql postgresql-contrib libpq-dev git curl certbot python3-certbot-nginx ufw fail2ban
+sudo apt install -y python3-pip python3-venv nginx postgresql postgresql-contrib libpq-dev git curl certbot python3-certbot-nginx ufw fail2ban pkg-config default-libmysqlclient-dev build-essential nodejs npm
+# Install PM2 globally
+sudo npm install -g pm2
 
 # 1.1 Security Setup (UFW & Fail2Ban)
 echo "[1.1/8] Configuring Firewall & Security..."
@@ -35,15 +37,17 @@ echo "y" | sudo ufw enable
 sudo systemctl start fail2ban
 sudo systemctl enable fail2ban
 
-# 2. Database Setup
-echo "[2/8] Setting up PostgreSQL..."
-sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
-sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
-sudo -u postgres psql -c "ALTER ROLE $DB_USER SET client_encoding TO 'utf8';"
-sudo -u postgres psql -c "ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';"
-sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
-sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON SCHEMA public TO $DB_USER;"
+# 2. Database Setup (PostgreSQL)
+# NOTE: Skipped because the project is currently using SQLite (as per settings.py).
+# Uncomment the block below if you switch back to PostgreSQL.
+echo "[2/8] Setting up PostgreSQL... (SKIPPED - SQLite in use)"
+# sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
+# sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
+# sudo -u postgres psql -c "ALTER ROLE $DB_USER SET client_encoding TO 'utf8';"
+# sudo -u postgres psql -c "ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';"
+# sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC';"
+# sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
+# sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON SCHEMA public TO $DB_USER;"
 
 # 2.0.1 Disable Apache (Prevent Port 80 conflict)
 echo "[2.0.1/8] Disabling Apache to prevent conflict with Nginx..."
@@ -101,6 +105,21 @@ ln -sfn "$REPO_DIR/frontend" /var/www/nextjs/btu-frontend
 sudo chown -R $USER:www-data "$REPO_DIR"
 sudo chmod -R 775 "$REPO_DIR"
 
+# 3.5 Frontend Setup (Next.js)
+echo "[3.5/8] Setting up Next.js Frontend..."
+FRONTEND_DIR="/var/www/nextjs/btu-frontend"
+cd $FRONTEND_DIR
+
+# Install and Build - SKIPPED AS REQUESTED
+echo "Skipping npm install/build as requested..."
+
+echo "Starting Frontend with PM2..."
+# Delete existing process if any to ensure fresh start
+pm2 delete btu-frontend || true
+pm2 start npm --name "btu-frontend" -- start -- --port 3000
+pm2 save
+pm2 startup
+
 # Navigate to Backend for subsequent steps
 cd $PROJECT_DIR
 
@@ -131,19 +150,30 @@ DB_PORT=5432
 EOF
 
 # 6. Django Initialization
-echo "[6/8] Initializing Django (Migrations & Static)..."
+# 6. Django Initialization
+echo "[6/8] Initializing Django..."
 
 # Robust fix for ALLOWED_HOSTS - ensures Django accepts the server IP
 sed -i "s/ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['$DomainName', '$SERVER_IP', 'localhost', '127.0.0.1']/" backend/settings.py || echo "ALLOWED_HOSTS = ['$DomainName']" >> backend/settings.py
 
-python manage.py collectstatic --noinput
-echo "Running Migrations..."
-python manage.py makemigrations --noinput
-python manage.py migrate --noinput
+# Prompt for Migrations
+echo ""
+echo "----------------------------------------------------------------"
+echo "BACKEND SETUP: MIGRATIONS & SUPERUSER"
+echo "Since you are using SQLite (or want to update DB), we can run migrations now."
+echo "If you want to SKIP touching the database (e.g. 'no update and amendments'), say NO."
+echo "----------------------------------------------------------------"
+read -p "Do you want to run Django Migrations and Create Superuser? (y/n): " RUN_MIGRATIONS
 
-# Auto-Create Superuser if meaningful
-echo "Checking/Creating Superuser..."
-cat <<EOF | python manage.py shell
+if [[ "$RUN_MIGRATIONS" =~ ^[Yy]$ ]]; then
+    echo "Running CollectStatic and Migrations..."
+    python manage.py collectstatic --noinput
+    python manage.py makemigrations --noinput
+    python manage.py migrate --noinput
+
+    # Auto-Create Superuser if meaningful
+    echo "Checking/Creating Superuser..."
+    cat <<EOF | python manage.py shell
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(is_superuser=True).exists():
@@ -157,6 +187,9 @@ if not User.objects.filter(is_superuser=True).exists():
 else:
     print("Superuser already exists.")
 EOF
+else
+    echo "Skipping Backend Database Operations as requested."
+fi
 
 # 7. Gunicorn Setup (Systemd)
 echo "[7/8] Configuring Gunicorn..."
@@ -170,7 +203,7 @@ if [ ! -f "$GUNICORN_PATH" ]; then
 fi
 
 # 7. Gunicorn Setup (Systemd)
-echo "[7/8] Configuring Gunicorn..."
+
 
 cat <<'EOF' > /tmp/btu-backend.service
 [Unit]
@@ -187,7 +220,7 @@ ExecStart=__PROJECT_DIR__/.venv/bin/gunicorn \
           --access-logfile - \
           --workers 3 \
           --bind unix:/run/btu-backend.sock \
-          backend.wsgi:application
+          core.wsgi:application
 
 [Install]
 WantedBy=multi-user.target
@@ -265,7 +298,10 @@ else
     echo "STATUS: Backend is OFFLINE (Socket missing - check logs: journalctl -u btu-backend)"
 fi
 echo "Next Steps:"
-echo "1. Create Superuser: cd $PROJECT_DIR && source .venv/bin/activate && python manage.py createsuperuser"
-
-echo "3. Admin Panel: http://$SERVER_IP/admin/"
+echo "1. Verify Frontend:   https://$DomainName"
+echo "2. Verify Backend:    https://$DomainName/api/"
+echo "3. Admin Panel:       https://$DomainName/admin/"
+echo "   (Default Login: admin / admin123)"
+echo ""
+echo "Deployment Log: Use 'journalctl -u btu-backend -f' to monitor backend logs."
 echo "------------------------------------------------"
