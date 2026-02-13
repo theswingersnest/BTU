@@ -154,7 +154,7 @@ EOF
 echo "[6/8] Initializing Django..."
 
 # Robust fix for ALLOWED_HOSTS - ensures Django accepts the server IP
-sed -i "s/ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['$DomainName', '$SERVER_IP', 'localhost', '127.0.0.1']/" backend/settings.py || echo "ALLOWED_HOSTS = ['$DomainName']" >> backend/settings.py
+sed -i "s/ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['$DomainName', '$SERVER_IP', 'localhost', '127.0.0.1']/" core/settings.py || echo "ALLOWED_HOSTS = ['$DomainName']" >> core/settings.py
 
 # Prompt for Migrations
 echo ""

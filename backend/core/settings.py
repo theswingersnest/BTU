@@ -66,3 +66,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Security: Required for Wallet Encryption (Fixes startup crash)
+ENCRYPTION_KEY = 'v_pT2qr5s8u0x3z6A9c1E4f7H0j3L6n9P1r4T7w0Z3b='
