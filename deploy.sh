@@ -78,7 +78,10 @@ sudo chmod -R 775 /var/www/git-repo
 if [ -d "$REPO_DIR" ]; then
     echo "Updating existing repository in $REPO_DIR..."
     cd "$REPO_DIR"
-    git pull
+    # Force sync with GitHub (Discards local VPS changes to ensure exact match)
+    echo "Fetching latest changes from GitHub..."
+    git fetch origin
+    git reset --hard origin/main
 else
     echo "Cloning repository to $REPO_DIR..."
     git clone "$REPO_URL" "$REPO_DIR"
@@ -110,8 +113,12 @@ echo "[3.5/8] Setting up Next.js Frontend..."
 FRONTEND_DIR="/var/www/nextjs/btu-frontend"
 cd $FRONTEND_DIR
 
-# Install and Build - SKIPPED AS REQUESTED
-echo "Skipping npm install/build as requested..."
+# Install and Build
+echo "Installing Frontend Dependencies..."
+npm install
+
+echo "Building Frontend..."
+npm run build
 
 echo "Starting Frontend with PM2..."
 # Delete existing process if any to ensure fresh start
@@ -162,18 +169,15 @@ echo "----------------------------------------------------------------"
 echo "BACKEND SETUP: MIGRATIONS & SUPERUSER"
 echo "Since you are using SQLite (or want to update DB), we can run migrations now."
 echo "If you want to SKIP touching the database (e.g. 'no update and amendments'), say NO."
-echo "----------------------------------------------------------------"
-read -p "Do you want to run Django Migrations and Create Superuser? (y/n): " RUN_MIGRATIONS
+# Force Migrations and Superuser Creation (Required to fix 'no such table' errors)
+echo "Running CollectStatic and Migrations..."
+python manage.py collectstatic --noinput
+python manage.py makemigrations --noinput
+python manage.py migrate --noinput
 
-if [[ "$RUN_MIGRATIONS" =~ ^[Yy]$ ]]; then
-    echo "Running CollectStatic and Migrations..."
-    python manage.py collectstatic --noinput
-    python manage.py makemigrations --noinput
-    python manage.py migrate --noinput
-
-    # Auto-Create Superuser if meaningful
-    echo "Checking/Creating Superuser..."
-    cat <<EOF | python manage.py shell
+# Auto-Create Superuser if meaningful
+echo "Checking/Creating Superuser..."
+cat <<EOF | python manage.py shell
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(is_superuser=True).exists():
@@ -187,9 +191,6 @@ if not User.objects.filter(is_superuser=True).exists():
 else:
     print("Superuser already exists.")
 EOF
-else
-    echo "Skipping Backend Database Operations as requested."
-fi
 
 # 7. Gunicorn Setup (Systemd)
 echo "[7/8] Configuring Gunicorn..."
