@@ -7,8 +7,8 @@ REPO_DIR="/var/www/git-repo/BTU"
 ENV_FILE="$PROJECT_DIR/.env"
 DB_NAME="btu_db"
 DB_USER="btu_user"
-DB_PASS="GnewP@ss4131#2026!" # CHANGE THIS
-SERVER_IP="104.236.228.27"
+DB_PASS="GnewP@ss4131#2026!"
+SERVER_IP="143.110.206.7"
 DomainName="thebigtimeuniverse.com"
 
 echo "------------------------------------------------"
@@ -146,14 +146,18 @@ pip install gunicorn setproctitle
 
 # 5. Environment Variables
 echo "[5/8] Creating .env file..."
+# Generate a truly random secret key
+SECRET_KEY=$(openssl rand -base64 50 | tr -d '\n')
+
 cat <<EOF > .env
-SECRET_KEY='django-insecure-5z3^__n+y3w^ut&ta1rq%othz)o62=ypi3yivyjj&h60(r2+-q'
+SECRET_KEY='${SECRET_KEY}'
 DEBUG=False
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASS
 DB_HOST=localhost
 DB_PORT=5432
+ALLOWED_HOSTS=$DomainName,$SERVER_IP,localhost,127.0.0.1
 EOF
 
 # 6. Django Initialization
@@ -161,7 +165,7 @@ EOF
 echo "[6/8] Initializing Django..."
 
 # Robust fix for ALLOWED_HOSTS - ensures Django accepts the server IP
-sed -i "s/ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['$DomainName', '$SERVER_IP', 'localhost', '127.0.0.1']/" core/settings.py || echo "ALLOWED_HOSTS = ['$DomainName']" >> core/settings.py
+# ALLOWED_HOSTS is now handled via environment variables in settings.py
 
 # Prompt for Migrations
 echo ""
@@ -184,7 +188,7 @@ if not User.objects.filter(is_superuser=True).exists():
     print("Creating default superuser 'admin'...")
     # Use environment variables or default fallback
     try:
-        User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
+    User.objects.create_superuser('admin', 'admin@example.com', '$DB_PASS')
         print("Superuser 'admin' created.")
     except Exception as e:
         print(f"Error creating superuser: {e}")
@@ -216,6 +220,7 @@ User=root
 Group=www-data
 WorkingDirectory=__PROJECT_DIR__
 RuntimeDirectory=gunicorn
+EnvironmentFile=__PROJECT_DIR__/.env
 Environment="PATH=__PROJECT_DIR__/.venv/bin"
 ExecStart=__PROJECT_DIR__/.venv/bin/gunicorn \
           --access-logfile - \
