@@ -8,7 +8,7 @@ ENV_FILE="$PROJECT_DIR/.env"
 DB_NAME="btu_db"
 DB_USER="btu_user"
 DB_PASS="GnewP@ss4131#2026!"
-SERVER_IP="143.110.206.7"
+SERVER_IP="165.245.140.36"
 DomainName="thebigtimeuniverse.com"
 
 echo "------------------------------------------------"
@@ -19,7 +19,9 @@ echo "------------------------------------------------"
 # 1. Update and Install System Dependencies
 echo "[1/8] Installing System Dependencies..."
 sudo apt update
-sudo apt install -y python3-pip python3-venv nginx postgresql postgresql-contrib libpq-dev git curl certbot python3-certbot-nginx ufw fail2ban pkg-config default-libmysqlclient-dev build-essential nodejs npm
+sudo apt install -y python3-pip python3-venv nginx postgresql postgresql-contrib libpq-dev git curl certbot python3-certbot-nginx ufw pkg-config default-libmysqlclient-dev build-essential nodejs npm
+# Install Fail2Ban separately to avoid lock issues
+sudo apt install -y fail2ban
 # Install PM2 globally
 sudo npm install -g pm2
 
@@ -120,12 +122,23 @@ npm install
 echo "Building Frontend..."
 npm run build
 
-echo "Starting Frontend with PM2..."
-# Delete existing process if any to ensure fresh start
-pm2 delete btu-frontend || true
-pm2 start npm --name "btu-frontend" -- start -- --port 3000
-pm2 save
-pm2 startup
+echo "Starting Frontend with PM2 (as www-data)..."
+# Fix permissions specifically for PM2 home directory for www-data
+sudo mkdir -p /var/www/.pm2
+sudo chown -R www-data:www-data /var/www/.pm2
+sudo chown -R www-data:www-data $FRONTEND_DIR
+
+# Set PM2_HOME to a writable directory for www-data
+export PM2_HOME=/var/www/.pm2
+
+# Start PM2 as www-data
+sudo -u www-data PM2_HOME=/var/www/.pm2 pm2 delete btu-frontend || true
+# Bind to localhost to prevent external access (Nginx handles it)
+sudo -u www-data PM2_HOME=/var/www/.pm2 pm2 start npm --name "btu-frontend" -- start -- --port 3000 --hostname 127.0.0.1
+sudo -u www-data PM2_HOME=/var/www/.pm2 pm2 save
+
+# Setup startup script for www-data
+sudo env PM2_HOME=/var/www/.pm2 pm2 startup systemd -u www-data --hp /var/www
 
 # Navigate to Backend for subsequent steps
 cd $PROJECT_DIR
@@ -188,8 +201,8 @@ if not User.objects.filter(is_superuser=True).exists():
     print("Creating default superuser 'admin'...")
     # Use environment variables or default fallback
     try:
-    User.objects.create_superuser('admin', 'admin@example.com', '$DB_PASS')
-        print("Superuser 'admin' created.")
+    User.objects.create_superuser('btu-admin', 'admin@example.com', '$DB_PASS')
+        print("Superuser 'btu-admin' created.")
     except Exception as e:
         print(f"Error creating superuser: {e}")
 else:
@@ -216,7 +229,7 @@ Description=gunicorn daemon for BTU Backend
 After=network.target
 
 [Service]
-User=root
+User=www-data
 Group=www-data
 WorkingDirectory=__PROJECT_DIR__
 RuntimeDirectory=gunicorn
