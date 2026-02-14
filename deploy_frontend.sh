@@ -147,114 +147,114 @@ sudo env PM2_HOME=/var/www/.pm2 pm2 startup systemd -u www-data --hp /var/www
 cd $PROJECT_DIR
 
 # 4. Virtual Environment & Requirements
-echo "[4/8] Setting up Virtual Environment..."
-# CRITICAL: Delete existing .venv if it was uploaded from Windows via FTP
-if [ -d ".venv" ]; then
-    echo "Found existing .venv. Deleting to prevent Windows/Linux conflicts..."
-    rm -rf .venv
-fi
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install gunicorn setproctitle
+# echo "[4/8] Setting up Virtual Environment..."
+# # CRITICAL: Delete existing .venv if it was uploaded from Windows via FTP
+# if [ -d ".venv" ]; then
+#     echo "Found existing .venv. Deleting to prevent Windows/Linux conflicts..."
+#     rm -rf .venv
+# fi
+# 
+# python3 -m venv .venv
+# source .venv/bin/activate
+# pip install --upgrade pip
+# pip install -r requirements.txt
+# pip install gunicorn setproctitle
 
 # 5. Environment Variables
-echo "[5/8] Creating .env file..."
-# Generate a truly random secret key
-SECRET_KEY=$(openssl rand -base64 50 | tr -d '\n')
-
-cat <<EOF > .env
-SECRET_KEY='${SECRET_KEY}'
-DEBUG=False
-DB_NAME=$DB_NAME
-DB_USER=$DB_USER
-DB_PASSWORD=$DB_PASS
-DB_HOST=localhost
-DB_PORT=5432
-ALLOWED_HOSTS=$DomainName,$SERVER_IP,localhost,127.0.0.1
-EOF
+# echo "[5/8] Creating .env file..."
+# # Generate a truly random secret key
+# SECRET_KEY=$(openssl rand -base64 50 | tr -d '\n')
+# 
+# cat <<EOF > .env
+# SECRET_KEY='${SECRET_KEY}'
+# DEBUG=False
+# DB_NAME=$DB_NAME
+# DB_USER=$DB_USER
+# DB_PASSWORD=$DB_PASS
+# DB_HOST=localhost
+# DB_PORT=5432
+# ALLOWED_HOSTS=$DomainName,$SERVER_IP,localhost,127.0.0.1
+# EOF
 
 # 6. Django Initialization
 # 6. Django Initialization
-echo "[6/8] Initializing Django..."
-
-# Robust fix for ALLOWED_HOSTS - ensures Django accepts the server IP
-# ALLOWED_HOSTS is now handled via environment variables in settings.py
-
-# Prompt for Migrations
-echo ""
-echo "----------------------------------------------------------------"
-echo "BACKEND SETUP: MIGRATIONS & SUPERUSER"
-echo "Since you are using SQLite (or want to update DB), we can run migrations now."
-echo "If you want to SKIP touching the database (e.g. 'no update and amendments'), say NO."
-# Force Migrations and Superuser Creation (Required to fix 'no such table' errors)
-echo "Running CollectStatic and Migrations..."
-python manage.py collectstatic --noinput
-python manage.py makemigrations --noinput
-python manage.py migrate --noinput
-
-# Auto-Create Superuser if meaningful
-echo "Checking/Creating Superuser..."
-cat <<EOF | python manage.py shell
-from django.contrib.auth import get_user_model
-User = get_user_model()
-if not User.objects.filter(is_superuser=True).exists():
-    print("Creating default superuser 'admin'...")
-    # Use environment variables or default fallback
-    try:
-        User.objects.create_superuser('btu-admin', 'admin@example.com', '$DB_PASS')
-        print("Superuser 'btu-admin' created.")
-    except Exception as e:
-        print(f"Error creating superuser: {e}")
-else:
-    print("Superuser already exists.")
-EOF
-
-# 7. Gunicorn Setup (Systemd)
-echo "[7/8] Configuring Gunicorn..."
-
-# Path verification
-GUNICORN_PATH="$PROJECT_DIR/.venv/bin/gunicorn"
-if [ ! -f "$GUNICORN_PATH" ]; then
-    echo "ERROR: Gunicorn not found at $GUNICORN_PATH. Reinstalling..."
-    source $PROJECT_DIR/.venv/bin/activate
-    pip install gunicorn
-fi
+# echo "[6/8] Initializing Django..."
+# 
+# # Robust fix for ALLOWED_HOSTS - ensures Django accepts the server IP
+# # ALLOWED_HOSTS is now handled via environment variables in settings.py
+# 
+# # Prompt for Migrations
+# echo ""
+# echo "----------------------------------------------------------------"
+# echo "BACKEND SETUP: MIGRATIONS & SUPERUSER"
+# echo "Since you are using SQLite (or want to update DB), we can run migrations now."
+# echo "If you want to SKIP touching the database (e.g. 'no update and amendments'), say NO."
+# # Force Migrations and Superuser Creation (Required to fix 'no such table' errors)
+# echo "Running CollectStatic and Migrations..."
+# python manage.py collectstatic --noinput
+# python manage.py makemigrations --noinput
+# python manage.py migrate --noinput
+# 
+# # Auto-Create Superuser if meaningful
+# echo "Checking/Creating Superuser..."
+# cat <<EOF | python manage.py shell
+# from django.contrib.auth import get_user_model
+# User = get_user_model()
+# if not User.objects.filter(is_superuser=True).exists():
+#     print("Creating default superuser 'admin'...")
+#     # Use environment variables or default fallback
+#     try:
+#         User.objects.create_superuser('btu-admin', 'admin@example.com', '$DB_PASS')
+#         print("Superuser 'btu-admin' created.")
+#     except Exception as e:
+#         print(f"Error creating superuser: {e}")
+# else:
+#     print("Superuser already exists.")
+# EOF
 
 # 7. Gunicorn Setup (Systemd)
-
-
-cat <<'EOF' > /tmp/btu-backend.service
-[Unit]
-Description=gunicorn daemon for BTU Backend
-After=network.target
-
-[Service]
-User=www-data
-Group=www-data
-WorkingDirectory=__PROJECT_DIR__
-RuntimeDirectory=gunicorn
-EnvironmentFile=__PROJECT_DIR__/.env
-Environment="PATH=__PROJECT_DIR__/.venv/bin"
-ExecStart=__PROJECT_DIR__/.venv/bin/gunicorn \
-          --access-logfile - \
-          --workers 3 \
-          --bind unix:/run/btu-backend.sock \
-          core.wsgi:application
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sed -i "s|__PROJECT_DIR__|$PROJECT_DIR|g" /tmp/btu-backend.service
-sudo mv /tmp/btu-backend.service /etc/systemd/system/btu-backend.service
-
-sudo systemctl daemon-reload
-sudo systemctl stop btu-backend.service || true
-sudo systemctl start btu-backend.service
-sudo systemctl enable btu-backend.service
+# echo "[7/8] Configuring Gunicorn..."
+# 
+# # Path verification
+# GUNICORN_PATH="$PROJECT_DIR/.venv/bin/gunicorn"
+# if [ ! -f "$GUNICORN_PATH" ]; then
+#     echo "ERROR: Gunicorn not found at $GUNICORN_PATH. Reinstalling..."
+#     source $PROJECT_DIR/.venv/bin/activate
+#     pip install gunicorn
+# fi
+# 
+# # 7. Gunicorn Setup (Systemd)
+# 
+# 
+# cat <<'EOF' > /tmp/btu-backend.service
+# [Unit]
+# Description=gunicorn daemon for BTU Backend
+# After=network.target
+# 
+# [Service]
+# User=www-data
+# Group=www-data
+# WorkingDirectory=__PROJECT_DIR__
+# RuntimeDirectory=gunicorn
+# EnvironmentFile=__PROJECT_DIR__/.env
+# Environment="PATH=__PROJECT_DIR__/.venv/bin"
+# ExecStart=__PROJECT_DIR__/.venv/bin/gunicorn \
+#           --access-logfile - \
+#           --workers 3 \
+#           --bind unix:/run/btu-backend.sock \
+#           core.wsgi:application
+# 
+# [Install]
+# WantedBy=multi-user.target
+# EOF
+# 
+# sed -i "s|__PROJECT_DIR__|$PROJECT_DIR|g" /tmp/btu-backend.service
+# sudo mv /tmp/btu-backend.service /etc/systemd/system/btu-backend.service
+# 
+# sudo systemctl daemon-reload
+# sudo systemctl stop btu-backend.service || true
+# sudo systemctl start btu-backend.service
+# sudo systemctl enable btu-backend.service
 
 # 8. Nginx Setup
 echo "[8/8] Configuring Nginx..."
