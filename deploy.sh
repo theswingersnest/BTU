@@ -33,6 +33,8 @@ sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow ssh
 sudo ufw allow 'Nginx Full'
+# Explicitly close port 3000 to outside
+sudo ufw deny 3000
 echo "y" | sudo ufw enable
 
 # Fail2Ban Setup
@@ -320,7 +322,7 @@ echo "Next Steps:"
 echo "1. Verify Frontend:   https://$DomainName"
 echo "2. Verify Backend:    https://$DomainName/api/"
 echo "3. Admin Panel:       https://$DomainName/admin/"
-echo "   (Default Login: admin / admin123)"
+echo "   (Default Login: btu-admin / GnewP@ss4131#2026!)"
 echo ""
 echo "Deployment Log: Use 'journalctl -u btu-backend -f' to monitor backend logs."
 echo "------------------------------------------------"

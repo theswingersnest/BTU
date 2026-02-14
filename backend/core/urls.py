@@ -15,9 +15,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from wallets import views as wallet_views
 
 urlpatterns = [
     path('api/home', include('home.urls')),  # home app urls for registration and login
+    path('api/blockcypher/webhook/', wallet_views.blockcypher_webhook, name='blockcypher_webhook'),
     path("admin/", admin.site.urls),  # Django admin site
     path("", include('admin_soft_pro.urls')),  # Include the soft admin dashboard URLs
     path('profiles/', include('profiles.urls')),  # Include the profiles app URLs

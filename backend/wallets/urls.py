@@ -3,4 +3,5 @@ from . import views
 
 urlpatterns = [
     path('', views.user_wallets, name='user_wallets'),
+    path('webhook/', views.blockcypher_webhook, name='blockcypher_webhook'),
 ]
